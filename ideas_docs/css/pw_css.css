@@ -1,0 +1,12 @@
+body	{font-family: sans-serif;
+         font-size: x-small;}
+
+head	{font-family: sans-serif;}
+
+th 	{background-image: url('tblbk.png');
+	background-repeat: repeat-x;}
+
+div	{font-size: small;}
+
+note	{font-size: xx-small;}
+

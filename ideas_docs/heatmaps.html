@@ -1,0 +1,193 @@
+<html>
+<head>
+
+	<title>IDEAs heatmaps</title>
+	<script language="javascript" type="text/javascript" src="js/jquery-1.9.1.js"></script>
+	<script type="text/javascript" src="js/json2.min.js"></script>
+	<script language="javascript" type="text/javascript" src="js/flot/jquery.flot.min.js"></script>
+	<script language="javascript" type="text/javascript" src="js/flot/jquery.flot.canvas.min.js"></script>
+	<script language="javascript" type="text/javascript" src="js/flot/plotHeatmap.js"></script>
+	<script language="javascript" type="text/javascript" src="js/flot/combineReplicates.js"></script>
+  	<script language="javascript" type="text/javascript" src="js/flot/hierarchicalClustering.js"></script>
+	<script language="javascript" type="text/javascript" src="js/flot/normalisation.js"></script>
+
+	<script>
+		var data;
+		
+		function setup(plotdata) {
+			data = plotdata;
+			//console.log(data);
+			
+			//Set experiment options
+			$.each(data.exp_data, function(key, value) {
+				$('.heatmap_exp').append($("<option/>", {
+        			value: value.name,
+        			text: value.name
+    			}));
+			});
+			
+			//Set selected experiments and conditions
+			$('#heatmap_exp0').val(data.experiment1);
+			$('#heatmap_exp1').val(data.experiment2);
+			
+			set_cons(data.experiment1, '0');
+			set_cons(data.experiment2, '1');
+			
+			$('#heatmap_con0').val(data.condition1);
+			$('#heatmap_con1').val(data.condition2);
+			
+			$(".heatmap_exp").change(function(evt) {
+				var id = evt.target.id;
+				var n = id.charAt(id.length-1);
+				var selection = $('#' + id + ' option:selected').val();
+				set_cons(selection, n);
+			});
+			
+			$("#redisplay").on("click", function() {
+				show_heatmaps();
+			});
+			
+			show_heatmaps();
+		}
+		
+		function set_cons(selection, n) {
+		
+			//Populate heatmap_con select box
+			if (selection==="None") {
+				//Set to None and disable
+				$('#heatmap_con' + n).html("<option value=None>None</option>");
+				$('#heatmap_con' + n).attr("disabled", true);
+				$('#heatmap_exp' + n).removeClass('testclass');
+				
+			} else {
+				//Add appropriate conditions from expData
+				$('#heatmap_con' + n).html("");
+				$('#heatmap_exp' + n).addClass('testclass');
+			
+				$.each(data.exp_data[selection.toUpperCase()]["conditionsArray"], function(key, value) {
+					$('#heatmap_con' + n).append("<option value='" + data.exp_data[selection.toUpperCase()]["conditionsArray"][key] + "'>" + data.exp_data[selection.toUpperCase()]["conditionsArray"][key] + " </option>");
+				});
+				$("#heatmap_con" + n).attr("disabled", false);
+			}
+			
+			if ($('.testclass').length > 0) {
+				$('#redisplay').attr('disabled',false);	
+			} else {
+				$('#redisplay').attr('disabled',true);	
+			}
+		}
+		
+		function show_heatmaps()
+        {
+			$('#plots').empty();
+			$('#plots').append('<table border="0"><tr><td valign="top"><div id="plottingWindow0" style="width:600px"></div></td><td valign="top"><div id="plottingWindow1" style="width:600px"></div></td></tr></table>');
+
+			var num = $('.testclass').length;
+            var used = new Array(num);
+			var expSelection = new Array(num);
+			var conSelection = new Array(num);
+			var count = 0;
+			$.each($('.testclass'), function() {
+		
+				//Work out the selected experiment and conditions
+				var n = this.id.charAt(this.id.length-1);
+				expSelection[count] = $("#heatmap_exp" + n).val();
+				conSelection[count] = $("#heatmap_con" + n).val();
+                used[count] = n;
+                count++;
+			});
+            var options = createOptions(used,expSelection,conSelection);
+			for(var x=0;x<num;x++)
+                plotHeatmap("plottingWindow"+used[x],data.node_data,data.exp_data,expSelection[x],conSelection[x],options[x]);
+		}
+        
+        function createOptions(used,expSelection,conSelection)
+        {
+            var range1 = parseFloat($("#range1").val());
+			var range2 = parseFloat($("#range2").val());
+            var userRange = $("#userRange").is(":checked");
+            var cluster = $("input[name='cluster']:checked").val();
+            var useCluster = false;
+            var clustering;
+            if(cluster != "no")
+            {
+                //we want to cluster on one, or all of the heatmaps
+                
+                //case of all heatmaps
+                if(cluster == "all")
+                {
+                    //need to modify the clustering procedure for this TO DO
+                }
+                else
+                {
+                    //its just one of the heatmaps
+                    var idx = parseFloat(cluster.substring(3));
+                    var found = false;
+                    var count = 0;
+                    while(count <= used.length && !found)
+                    {
+                        if(used[count] == idx)
+                        {
+                            idx = count;
+                            found = true;
+                        }
+                        else
+                            count++;
+                    }
+                    if(found)
+                    {
+                        clustering = hierarchicalClustering(data.node_data,data.exp_data[expSelection[idx].toUpperCase()],conSelection[idx]);
+                        useCluster = true;
+                    }
+                }
+            }
+            var sync = $("input[name='sync']:checked").val() === 'yes';
+            var showLabels = $("#showLabels").is(":checked");
+
+            var options = new Array(used.length);
+            for(var x=0;x<used.length;x++)
+            {
+                var currIdx = used[x];
+                var currOptions = {};
+                if(userRange)
+                    currOptions.dataRange = [range1,range2];
+                if(sync && used.length > 1)
+                {
+                    //create the ids of the other heatmaps
+                    var syncedDivs = new Array(used.length-1);
+                    var count=0;
+                    for(var y=0;y<used.length;y++)
+                        if(x!=y)
+                        {
+                            syncedDivs[count] = 'plottingWindow'+used[y];
+                            count++;
+                        }
+                    currOptions.syncScroll = syncedDivs;
+                }
+                if(useCluster)
+                    currOptions.clustering = clustering;
+                currOptions.showLabels = showLabels;
+                                
+                options[x] = currOptions;
+            }
+            
+            
+            return options;
+        }
+		
+	</script>
+</head>
+<body>
+<div id="configure_display">
+Heatmap One:<select id='heatmap_exp0' class='heatmap_exp'><option value='None'>None</option></select><select id='heatmap_con0' class='heatmap_con' disabled><option value='None'>None</option></select>
+<nbsp><nbsp><nbsp>Heatmap Two:<select id='heatmap_exp1' class='heatmap_exp'><option value='None'>None</option></select><select id='heatmap_con1' class='heatmap_con' disabled><option value='None'>None</option></select>
+Range: <input type="text" id="range1" value=-3 style="width:50px"> <input type="text" id="range2" value=3 style="width:50px">Use range?<input type='checkbox' id='userRange' defaultChecked=true checked="checked">
+<BR>
+SyncScroll:<input type='radio' name='sync' id='syncNo' value='no'><label for='syncNo'>no</label><input type='radio' name='sync' id='syncYes' value='yes' checked='checked'><label for='syncYes'>yes</label>
+Cluster data:<input type='radio' name='cluster' id='clusterNo' value='no' checked='checked'><label for='clusterNo'>no</label> <input type='radio' name='cluster' id='cluster1' value='exp0'><label for='cluster1'>Heatmap 1</label><input type='radio' name='cluster' id='cluster2' value='exp1'><label for='cluster2'>Heatmap 2</label><input type='radio' name='cluster' id='clusterAll' value='all' disabled=true><label for='clusterAll'>All selected</label>
+<input type="checkbox" id="showLabels" defaultChecked=true checked="checked"><label for="showLabels">Show node labels?</label><input type="button" value="Redisplay" id="redisplay"/>
+</div>
+<div id="plots">
+</div>
+</body>
+</html>
